@@ -4,10 +4,17 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -22,6 +29,30 @@ public class SunshineFragment extends android.support.v4.app.Fragment {
 
     public SunshineFragment() {
 
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        // Add this line in order for this fragment to handle menu events.
+        setHasOptionsMenu(true);
+    }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater menuInflater) {
+
+        menuInflater.inflate(R.menu.forcastfragment,menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem menuItem) {
+
+        if(R.id.action_refresh ==  menuItem.getItemId()) {
+            new FetchWeatherTask().execute("q=94043","mode=json","units=metric","cnt=7");
+            return true;
+        }
+
+        return super.onOptionsItemSelected(menuItem);
     }
 
     @Override
@@ -44,15 +75,17 @@ public class SunshineFragment extends android.support.v4.app.Fragment {
 
         listView.setAdapter(arrayAdapter);
 
-        new FetchWeatherTask().execute("http://api.openweathermap.org/data/2.5/forecast/daily?q=94043&mode=json&units=metric&cnt=7");
+        //new FetchWeatherTask().execute("http://api.openweathermap.org/data/2.5/forecast/daily?q=94043&mode=json&units=metric&cnt=7");
 
         return view;
     }
 
-    public class FetchWeatherTask extends AsyncTask<String, Void, String> {
+    public class FetchWeatherTask extends AsyncTask<String, Void, Void> {
+
+        private final String LOG_TAG = FetchWeatherTask.class.getSimpleName();
 
         @Override
-        protected String doInBackground(String... params) {
+        protected Void doInBackground(String... params) {
             // These two need to be declared outside the try/catch
             // so that they can be closed in the finally block.
             HttpURLConnection urlConnection = null;
@@ -62,10 +95,15 @@ public class SunshineFragment extends android.support.v4.app.Fragment {
             String forecastJsonStr = null;
 
             try {
+
+                StringBuilder uris = new StringBuilder();
+
+                buildURI(uris,params);
+
                 // Construct the URL for the OpenWeatherMap query
                 // Possible parameters are available at OWM's forecast API page, at
                 // http://openweathermap.org/API#forecast
-                URL url = new URL(params[0]);
+                URL url = new URL("http://api.openweathermap.org/data/2.5/forecast/daily"+uris+"&appid=6b6c11f811430983627c8f2b8eb15159");
 
                 // Create the request to OpenWeatherMap, and open the connection
                 urlConnection = (HttpURLConnection) url.openConnection();
@@ -94,6 +132,11 @@ public class SunshineFragment extends android.support.v4.app.Fragment {
                     forecastJsonStr = null;
                 }
                 forecastJsonStr = buffer.toString();
+
+                Log.v(LOG_TAG,"Forcast Json String" + forecastJsonStr);
+
+                final double max = getMaxTemperatureForADay(forecastJsonStr, 1);
+
             } catch (IOException e) {
                 Log.e("PlaceholderFragment", "Error ", e);
                 // If the code didn't successfully get the weather data, there's no point in attempting
@@ -111,8 +154,44 @@ public class SunshineFragment extends android.support.v4.app.Fragment {
                     }
                 }
             }
+            return null;
+        }
+    }
 
-            return forecastJsonStr;
+    private static double getMaxTemperatureForADay(final String jsonString, int dayIndex) {
+
+        Double day = null;
+        try {
+            final JSONObject jsonObject = new JSONObject(jsonString);
+            final JSONArray list = jsonObject.getJSONArray("list");
+
+            final JSONObject jsonObject1 = (JSONObject) list.get(dayIndex);
+
+            final JSONObject temp = jsonObject1.getJSONObject("temp");
+
+            if(temp.getDouble("day") >= 0) {
+                return temp.getDouble("day");
+            }
+
+            return -1;
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+
+        return day;
+    }
+
+    private void buildURI(final StringBuilder uri,final String... params) {
+
+        for(String param : params) {
+
+            if(uri.length() == 0) {
+                uri.append("?");
+                uri.append(param);
+            }
+            uri.append("&");
+            uri.append(param);
         }
     }
 }
